@@ -203,6 +203,22 @@ def GacEnforce(constraints, csp, reasonVar, reasonVal):
        from the current domains of the variables.
        Return "OK" if completed "DWO" if found
        a domain wipe out.'''
+    while constraints:
+        constraint = constraints.pop()
+        
+        for var in constraint.scope():
+            for val in var.curDomain():
+                if not constraint.hasSupport(var, val):
+                    var.pruneValue(val, reasonVar, reasonVal)
+
+                    if var.curDomainSize() == 0:
+                        return "DWO"
+                    
+                    for re_constraint in csp.constraintsOf(var):
+                        if re_constraint.name != constraint.name and re_constraint not in constraints:
+                            constraints.append(re_constraint)
+    
+    return "OK"
 
 def GAC(unAssignedVars, csp, allSolutions, trace):
     '''GAC search.
