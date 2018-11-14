@@ -236,3 +236,30 @@ def GAC(unAssignedVars, csp, allSolutions, trace):
        must make sure that we restore all pruned values before
        returning.
     '''
+    if unAssignedVars.empty():
+        solution = []
+        for v in csp.variables():
+            solution.append((v, v.getValue()))
+        return [solution]
+
+    bt_search.nodesExplored += 1
+    solutions = []
+    var = unAssignedVars.extract()
+
+    for val in var.curDomain():
+        var.setValue(val)
+
+        if GacEnforce(csp.constraintsOf(var), csp, var, val) != "DWO":
+            new_solutions = GAC(unAssignedVars, csp, allSolutions, trace)
+
+            if new_solutions:
+                solutions.extend(new_solutions)
+            if solutions and not allSolutions:
+                Variable.restoreValues(var, val)
+                break
+        
+        Variable.restoreValues(var, val)
+    
+    var.unAssign()
+    unAssignedVars.insert(var)
+    return solutions
