@@ -168,6 +168,35 @@ def FC(unAssignedVars, csp, allSolutions, trace):
        must make sure that we restore all pruned values before
        returning.
     '''
+    if unAssignedVars.empty():
+        solution = []
+        for v in csp.variables():
+            solution.append((v, v.getValue()))
+        return [solution]
+
+    bt_search.nodesExplored += 1
+    solutions = []
+    var = unAssignedVars.extract()
+
+    for val in var.curDomain():
+        var.setValue(val)
+        for constraint in csp.constraintsOf(var):
+            if constraint.numUnassigned() == 1 and FCCheck(constraint, var, val) == "DWO":
+                break
+        else:
+            new_solutions = FC(unAssignedVars, csp, allSolutions, trace)
+
+            if new_solutions:
+                solutions.extend(new_solutions)
+            if solutions and not allSolutions:
+                Variable.restoreValues(var, val)
+                break
+
+        Variable.restoreValues(var, val)
+    
+    var.unAssign()
+    unAssignedVars.insert(var)
+    return solutions
 
 def GacEnforce(constraints, csp, reasonVar, reasonVal):
     '''Establish GAC on constraints by pruning values
