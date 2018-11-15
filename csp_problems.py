@@ -333,16 +333,97 @@ def solve_planes(planes_problem, algo, allsolns,
        The returned list of lists should contain a list for every
        plane.
     '''
-
     #BUILD your CSP here and store it in the varable csp
+    # print(planes_problem.min_maintenance_frequency)
+    following_flights = {}
+    for flight1, flight2 in planes_problem.can_follow:
+        if flight1 in following_flights:
+            following_flights[flight1].append(flight2)
+        else:
+            following_flights[flight1] = [flight2]
+    
+    following_flights[""] = [""]
+    variables = []
+    constraints = []
 
+    for plane in planes_problem.planes:
+        plane_vars = []
+        available_flights = planes_problem.can_fly(plane)
+        starting_flights = planes_problem.can_start(plane)
 
+        start_var = Variable("{} 0".format(plane), starting_flights)
+        plane_vars.append(start_var)
+
+        for i in range(len(available_flights) - 1):
+            legal_flights = available_flights
+
+            var = Variable("{} {}".format(plane, i + 1), legal_flights)
+
+            plane_vars.append(var)
+        
+            table_satisfying_assignment = [[flight1, flight2] for flight1 in plane_vars[i].domain() if flight1 in following_flights for flight2 in following_flights[flight1]]
+            
+            if table_satisfying_assignment:
+                table_constraint = TableConstraint(
+                    name="Plane {} | Flight number {} and {}".format(plane, i, i + 1),
+                    scope=[plane_vars[i], plane_vars[i + 1]],
+                    satisfyingAssignments=table_satisfying_assignment
+                )
+
+                constraints.append(table_constraint)
+
+        variables.extend(plane_vars)
+
+        i = 0
+        j = planes_problem.min_maintenance_frequency
+
+        while j <= len(plane_vars):
+            maintenance_constraint = NValuesConstraint(
+                name="Plane {} | Maintenance Constraint of subsequence [{}:{}]".format(plane, i, j),
+                scope=plane_vars[i:j],
+                required_values=planes_problem.maintenance_flights,
+                lower_bound=1,
+                upper_bound=float("inf")
+            )
+
+            constraints.append(maintenance_constraint)
+
+            i += 1
+            j += 1
+    
+    constraints.append(AllDiffConstraint("All Diff Constraint on Flights", variables))
+
+    csp = CSP("Plane Problem CSP", variables, constraints)
+    
     #invoke search with the passed parameters
     solutions, num_nodes = bt_search(algo, csp, variableHeuristic, allsolns, trace)
+    
+    solution_lists = []
+    print(solutions)
+
+    for solution in solutions:
+        solution_dict = {}
+
+        for assignment in solution:
+            var = assignment[0]
+            flight = assignment[1]
+
+            plane, index = var.name().split(' ')
+
+            if plane not in solution_dict:
+                solution_dict[plane] = []
+
+            solution_dict[plane].insert(int(index), flight)
+            
+        solution_list = []
+        for plane in solution_dict:
+            solution_list.append([plane] + solution_dict[plane])
+
+        solution_lists.append(solution_list)
 
     #Convert each solution into a list of lists specifying a schedule
     #for each plane in the format described above.
-
+    # print(solutions)
     #then return a list containing all converted solutions
     #(i.e., a list of lists of lists)
-    util.raiseNotDefined()
+    return solution_lists
