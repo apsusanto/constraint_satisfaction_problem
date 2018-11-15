@@ -345,23 +345,39 @@ def solve_planes(planes_problem, algo, allsolns,
     following_flights[""] = [""]
     variables = []
     constraints = []
+    empties = []
 
     for plane in planes_problem.planes:
         plane_vars = []
-        available_flights = planes_problem.can_fly(plane)
+        legal_flights = planes_problem.can_fly(plane)
         starting_flights = planes_problem.can_start(plane)
 
-        start_var = Variable("{} 0".format(plane), starting_flights)
+        empty_start = "empty {} {}".format(plane, 0)
+        empties.append(empty_start)
+        start_var = Variable("{} 0".format(plane), starting_flights + [empty_start])
         plane_vars.append(start_var)
 
-        for i in range(len(available_flights) - 1):
-            legal_flights = available_flights
+        for i in range(len(legal_flights) - 1):
+            empty = "empty {} {}".format(plane, i + 1)
+            empties.append(empty)
 
-            var = Variable("{} {}".format(plane, i + 1), legal_flights)
+            var = Variable("{} {}".format(plane, i + 1), legal_flights + [empty])
 
             plane_vars.append(var)
         
-            table_satisfying_assignment = [[flight1, flight2] for flight1 in plane_vars[i].domain() if flight1 in following_flights for flight2 in following_flights[flight1]]
+            # table_satisfying_assignment = [
+            #     [flight1, flight2] for flight1 in plane_vars[i].domain() if flight1 in following_flights for flight2 in following_flights[flight1]
+            # ]
+
+            table_satisfying_assignment = []
+
+            for flight1 in plane_vars[i].domain():
+                if flight1 in following_flights:
+                    for flight2 in following_flights[flight1]:
+                        table_satisfying_assignment.append([flight1, flight2])
+                    table_satisfying_assignment.append([flight1, empty])
+                elif "empty" in flight1:
+                    table_satisfying_assignment.append([flight1, empty])
             
             if table_satisfying_assignment:
                 table_constraint = TableConstraint(
@@ -372,6 +388,8 @@ def solve_planes(planes_problem, algo, allsolns,
 
                 constraints.append(table_constraint)
 
+            # print([var.name() for var in table_constraint.scope()], table_satisfying_assignment)
+
         variables.extend(plane_vars)
 
         i = 0
@@ -381,7 +399,7 @@ def solve_planes(planes_problem, algo, allsolns,
             maintenance_constraint = NValuesConstraint(
                 name="Plane {} | Maintenance Constraint of subsequence [{}:{}]".format(plane, i, j),
                 scope=plane_vars[i:j],
-                required_values=planes_problem.maintenance_flights,
+                required_values=planes_problem.maintenance_flights + empties,
                 lower_bound=1,
                 upper_bound=float("inf")
             )
@@ -391,6 +409,14 @@ def solve_planes(planes_problem, algo, allsolns,
             i += 1
             j += 1
     
+    constraints.append(NValuesConstraint(
+        name="All planes assigned",
+        scope=variables,
+        required_values=planes_problem.flights,
+        lower_bound=len(planes_problem.flights),
+        upper_bound=len(planes_problem.flights)
+    ))
+
     constraints.append(AllDiffConstraint("All Diff Constraint on Flights", variables))
 
     csp = CSP("Plane Problem CSP", variables, constraints)
@@ -399,7 +425,6 @@ def solve_planes(planes_problem, algo, allsolns,
     solutions, num_nodes = bt_search(algo, csp, variableHeuristic, allsolns, trace)
     
     solution_lists = []
-    print(solutions)
 
     for solution in solutions:
         solution_dict = {}
@@ -413,8 +438,9 @@ def solve_planes(planes_problem, algo, allsolns,
             if plane not in solution_dict:
                 solution_dict[plane] = []
 
-            solution_dict[plane].insert(int(index), flight)
-            
+            if "empty" not in flight:
+                solution_dict[plane].insert(int(index), flight)
+
         solution_list = []
         for plane in solution_dict:
             solution_list.append([plane] + solution_dict[plane])
